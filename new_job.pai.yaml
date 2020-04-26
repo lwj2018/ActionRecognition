@@ -1,0 +1,22 @@
+protocolVersion: 2
+name: new_job
+type: job
+prerequisites:
+  - name: image
+    type: dockerimage
+    uri: '10.13.22.251:8180/jingke/deepo:pytorch-py36-cu100'
+taskRoles:
+  train:
+    instances: 1
+    dockerImage: image
+    resourcePerInstance:
+      cpu: 1
+      memoryMB: 16384
+      gpu: 1
+    commands:
+      - python /data/projects/ActionRecognition/train.py
+extras:
+  com.microsoft.pai.runtimeplugin:
+    - plugin: ssh
+      parameters:
+        jobssh: true
