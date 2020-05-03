@@ -22,6 +22,8 @@ def eval_c3d(model, criterion, valloader,
     recoder.tik()
     recoder.data_tik()
     for i, batch in enumerate(valloader):
+        # Reduce the evaluation time !!!
+        if i>1000: break
         # measure data loading time
         recoder.data_tok()
 

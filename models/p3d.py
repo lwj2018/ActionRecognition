@@ -1,72 +1,16 @@
 import torch
 import torch.nn as nn
+import torchvision.models.resnet
 
-from torch.hub import load_state_dict_from_url
-import torchvision.models.video.resnet
-
-__all__ = ['r3d_18', 'mc3_18', 'r2plus1d_18']
-
-model_urls = {
-    'r3d_18': 'https://download.pytorch.org/models/r3d_18-b3b3357e.pth',
-    'mc3_18': 'https://download.pytorch.org/models/mc3_18-a90a0ba3.pth',
-    'r2plus1d_18': 'https://download.pytorch.org/models/r2plus1d_18-91a641e6.pth',
-}
-
-
-class Conv3DSimple(nn.Conv3d):
-    def __init__(self,
-                 in_planes,
-                 out_planes,
-                 midplanes=None,
-                 stride=1,
-                 padding=1):
-
-        super(Conv3DSimple, self).__init__(
-            in_channels=in_planes,
-            out_channels=out_planes,
-            kernel_size=(3, 3, 3),
-            stride=stride,
-            padding=padding,
-            bias=False)
-
-    @staticmethod
-    def get_downsample_stride(stride):
-        return (stride, stride, stride)
-
-
-class Conv2Plus1D(nn.Sequential):
+class Conv3DSpatial(nn.Conv3d):
 
     def __init__(self,
                  in_planes,
                  out_planes,
-                 midplanes,
-                 stride=1,
-                 padding=1):
-        super(Conv2Plus1D, self).__init__(
-            nn.Conv3d(in_planes, midplanes, kernel_size=(1, 3, 3),
-                      stride=(1, stride, stride), padding=(0, padding, padding),
-                      bias=False),
-            nn.BatchNorm3d(midplanes),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(midplanes, out_planes, kernel_size=(3, 1, 1),
-                      stride=(stride, 1, 1), padding=(padding, 0, 0),
-                      bias=False))
-
-    @staticmethod
-    def get_downsample_stride(stride):
-        return (stride, stride, stride)
-
-
-class Conv3DNoTemporal(nn.Conv3d):
-
-    def __init__(self,
-                 in_planes,
-                 out_planes,
-                 midplanes=None,
                  stride=1,
                  padding=1):
 
-        super(Conv3DNoTemporal, self).__init__(
+        super(Conv3DSpatial, self).__init__(
             in_channels=in_planes,
             out_channels=out_planes,
             kernel_size=(1, 3, 3),
@@ -74,70 +18,51 @@ class Conv3DNoTemporal(nn.Conv3d):
             padding=(0, padding, padding),
             bias=False)
 
-    @staticmethod
-    def get_downsample_stride(stride):
-        return (1, stride, stride)
+
+class Conv3DTemporal(nn.Conv3d):
+
+    def __init__(self,
+                 in_planes,
+                 out_planes,
+                 stride=1,
+                 padding=1):
+
+        super(Conv3DTemporal, self).__init__(
+            in_channels=in_planes,
+            out_channels=out_planes,
+            kernel_size=(3, 1, 1),
+            stride=(stride, 1, 1),
+            padding=(padding, 0, 0),
+            bias=False)
 
 
-class BasicBlock(nn.Module):
-
-    __constants__ = ['downsample']
-    expansion = 1
-
-    def __init__(self, inplanes, planes, conv_builder, stride=1, downsample=None):
-        midplanes = (inplanes * planes * 3 * 3 * 3) // (inplanes * 3 * 3 + 3 * planes)
-
-        super(BasicBlock, self).__init__()
-        self.conv1 = nn.Sequential(
-            conv_builder(inplanes, planes, midplanes, stride),
-            nn.BatchNorm3d(planes),
-            nn.ReLU(inplace=True)
-        )
-        self.conv2 = nn.Sequential(
-            conv_builder(planes, planes, midplanes),
-            nn.BatchNorm3d(planes)
-        )
-        self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
-        self.stride = stride
-
-    def forward(self, x):
-        residual = x
-
-        out = self.conv1(x)
-        out = self.conv2(out)
-        if self.downsample is not None:
-            residual = self.downsample(x)
-
-        out += residual
-        out = self.relu(out)
-
-        return out
-
-
-class Bottleneck(nn.Module):
+class P3DBlock_A(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, conv_builder, stride=1, downsample=None):
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
 
-        super(Bottleneck, self).__init__()
-        midplanes = (inplanes * planes * 3 * 3 * 3) // (inplanes * 3 * 3 + 3 * planes)
+        super(P3DBlock_A, self).__init__()
 
         # 1x1x1
         self.conv1 = nn.Sequential(
-            nn.Conv3d(inplanes, planes, kernel_size=1, bias=False),
+            nn.Conv3d(inplanes, planes, kernel_size=1, bias=False, stride=stride),
             nn.BatchNorm3d(planes),
             nn.ReLU(inplace=True)
         )
-        # Second kernel
+        # Spatial kernel
         self.conv2 = nn.Sequential(
-            conv_builder(planes, planes, midplanes, stride),
+            Conv3DSpatial(planes, planes),
             nn.BatchNorm3d(planes),
             nn.ReLU(inplace=True)
         )
-
-        # 1x1x1
+        # Temporal kernel
         self.conv3 = nn.Sequential(
+            Conv3DTemporal(planes, planes),
+            nn.BatchNorm3d(planes),
+            nn.ReLU(inplace=True)
+        )
+        # 1x1x1
+        self.conv4 = nn.Sequential(
             nn.Conv3d(planes, planes * self.expansion, kernel_size=1, bias=False),
             nn.BatchNorm3d(planes * self.expansion)
         )
@@ -151,6 +76,7 @@ class Bottleneck(nn.Module):
         out = self.conv1(x)
         out = self.conv2(out)
         out = self.conv3(out)
+        out = self.conv4(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)
@@ -160,6 +86,107 @@ class Bottleneck(nn.Module):
 
         return out
 
+class P3DBlock_B(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
+
+        super(P3DBlock_B, self).__init__()
+
+        # 1x1x1
+        self.conv1 = nn.Sequential(
+            nn.Conv3d(inplanes, planes, kernel_size=1, bias=False, stride=stride),
+            nn.BatchNorm3d(planes),
+            nn.ReLU(inplace=True)
+        )
+        # Spatial kernel
+        self.conv2 = nn.Sequential(
+            Conv3DSpatial(planes, planes),
+            nn.BatchNorm3d(planes),
+            nn.ReLU(inplace=True)
+        )
+        # Temporal kernel
+        self.conv3 = nn.Sequential(
+            Conv3DTemporal(planes, planes),
+            nn.BatchNorm3d(planes),
+            nn.ReLU(inplace=True)
+        )
+        # 1x1x1
+        self.conv4 = nn.Sequential(
+            nn.Conv3d(planes, planes * self.expansion, kernel_size=1, bias=False),
+            nn.BatchNorm3d(planes * self.expansion)
+        )
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        outs = self.conv2(out)
+        outt = self.conv3(out)
+        out = outs + outt
+        out = self.conv4(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+class P3DBlock_C(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
+
+        super(P3DBlock_C, self).__init__()
+
+        # 1x1x1
+        self.conv1 = nn.Sequential(
+            nn.Conv3d(inplanes, planes, kernel_size=1, bias=False, stride=stride),
+            nn.BatchNorm3d(planes),
+            nn.ReLU(inplace=True)
+        )
+        # Spatial kernel
+        self.conv2 = nn.Sequential(
+            Conv3DSpatial(planes, planes),
+            nn.BatchNorm3d(planes),
+            nn.ReLU(inplace=True)
+        )
+        # Temporal kernel
+        self.conv3 = nn.Sequential(
+            Conv3DTemporal(planes, planes),
+            nn.BatchNorm3d(planes),
+            nn.ReLU(inplace=True)
+        )
+        # 1x1x1
+        self.conv4 = nn.Sequential(
+            nn.Conv3d(planes, planes * self.expansion, kernel_size=1, bias=False),
+            nn.BatchNorm3d(planes * self.expansion)
+        )
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        outs = self.conv2(out)
+        outst = self.conv3(outs)
+        out = outs + outst
+        out = self.conv4(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
 
 class BasicStem(nn.Sequential):
     """The default conv-batchnorm-relu stem
@@ -170,7 +197,6 @@ class BasicStem(nn.Sequential):
                       padding=(1, 3, 3), bias=False),
             nn.BatchNorm3d(64),
             nn.ReLU(inplace=True))
-
 
 class R2Plus1dStem(nn.Sequential):
     """R(2+1)D stem is different than the default one as it uses separated 3D convolution
@@ -188,10 +214,9 @@ class R2Plus1dStem(nn.Sequential):
             nn.BatchNorm3d(64),
             nn.ReLU(inplace=True))
 
-
 class VideoResNet(nn.Module):
 
-    def __init__(self, block, conv_makers, layers,
+    def __init__(self, block, layers,
                  stem, num_classes=400,
                  zero_init_residual=False):
         """Generic resnet video generator.
@@ -209,10 +234,10 @@ class VideoResNet(nn.Module):
 
         self.stem = stem()
 
-        self.layer1 = self._make_layer(block, conv_makers[0], 64, layers[0], stride=1)
-        self.layer2 = self._make_layer(block, conv_makers[1], 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, conv_makers[2], 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, conv_makers[3], 512, layers[3], stride=2)
+        self.layer1 = self._make_layer(block, 64, layers[0], stride=1)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
         self.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
@@ -240,22 +265,21 @@ class VideoResNet(nn.Module):
 
         return x
 
-    def _make_layer(self, block, conv_builder, planes, blocks, stride=1):
+    def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
 
         if stride != 1 or self.inplanes != planes * block.expansion:
-            ds_stride = conv_builder.get_downsample_stride(stride)
             downsample = nn.Sequential(
                 nn.Conv3d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=ds_stride, bias=False),
+                          kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm3d(planes * block.expansion)
             )
         layers = []
-        layers.append(block(self.inplanes, planes, conv_builder, stride, downsample))
+        layers.append(block(self.inplanes, planes, stride, downsample))
 
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, conv_builder))
+            layers.append(block(self.inplanes, planes))
 
         return nn.Sequential(*layers)
 
@@ -273,70 +297,80 @@ class VideoResNet(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
 
+    def get_optim_policies(self,lr):
+        return [
+            {'params':self.stem.parameters(),'lr':lr},
+            {'params':self.layer1.parameters(),'lr':lr},
+            {'params':self.layer2.parameters(),'lr':lr},
+            {'params':self.layer3.parameters(),'lr':lr},
+            {'params':self.layer4.parameters(),'lr':lr},
+            {'params':self.fc.parameters(),'lr':lr}
+        ]
+
 
 def _video_resnet(arch, pretrained=False, progress=True, **kwargs):
     model = VideoResNet(**kwargs)
 
     if pretrained:
+        # part resume
+        model_dict = model.state_dict()
         state_dict = load_state_dict_from_url(model_urls[arch],
                                               progress=progress)
-        model.load_state_dict(state_dict)
+        state_dict = {k : v for k,v in state_dict.items() if 'fc' not in k}
+        model_dict.update(state_dict)
+        model.load_state_dict(model_dict)
     return model
 
-
-def r3d_18(pretrained=False, progress=True, **kwargs):
-    """Construct 18 layer Resnet3D model as in
-    https://arxiv.org/abs/1711.11248
+def p3d18_a(pretrained=False, progress=True, **kwargs):
+    """Construct 18 layer Pseudo-3D model as in
+    http://openaccess.thecvf.com/content_ICCV_2017/papers/Qiu_Learning_Spatio-Temporal_Representation_ICCV_2017_paper.pdf
 
     Args:
         pretrained (bool): If True, returns a model pre-trained on Kinetics-400
         progress (bool): If True, displays a progress bar of the download to stderr
 
     Returns:
-        nn.Module: R3D-18 network
+        nn.Module: P3DA-18 network
     """
 
-    return _video_resnet('r3d_18',
+    return _video_resnet('p3d_a',
                          pretrained, progress,
-                         block=BasicBlock,
-                         conv_makers=[Conv3DSimple] * 4,
+                         block=P3DBlock_A,
                          layers=[2, 2, 2, 2],
                          stem=BasicStem, **kwargs)
 
-
-def mc3_18(pretrained=False, progress=True, **kwargs):
-    """Constructor for 18 layer Mixed Convolution network as in
-    https://arxiv.org/abs/1711.11248
+def p3d18_b(pretrained=False, progress=True, **kwargs):
+    """Construct 18 layer Pseudo-3D model as in
+    http://openaccess.thecvf.com/content_ICCV_2017/papers/Qiu_Learning_Spatio-Temporal_Representation_ICCV_2017_paper.pdf
 
     Args:
         pretrained (bool): If True, returns a model pre-trained on Kinetics-400
         progress (bool): If True, displays a progress bar of the download to stderr
 
     Returns:
-        nn.Module: MC3 Network definition
+        nn.Module: P3DB-18 network
     """
-    return _video_resnet('mc3_18',
+
+    return _video_resnet('p3d_b',
                          pretrained, progress,
-                         block=BasicBlock,
-                         conv_makers=[Conv3DSimple] + [Conv3DNoTemporal] * 3,
+                         block=P3DBlock_B,
                          layers=[2, 2, 2, 2],
                          stem=BasicStem, **kwargs)
 
-
-def r2plus1d_18(pretrained=False, progress=True, **kwargs):
-    """Constructor for the 18 layer deep R(2+1)D network as in
-    https://arxiv.org/abs/1711.11248
+def p3d18_c(pretrained=False, progress=True, **kwargs):
+    """Construct 18 layer Pseudo-3D model as in
+    http://openaccess.thecvf.com/content_ICCV_2017/papers/Qiu_Learning_Spatio-Temporal_Representation_ICCV_2017_paper.pdf
 
     Args:
         pretrained (bool): If True, returns a model pre-trained on Kinetics-400
         progress (bool): If True, displays a progress bar of the download to stderr
 
     Returns:
-        nn.Module: R(2+1)D-18 network
+        nn.Module: P3DC-18 network
     """
-    return _video_resnet('r2plus1d_18',
+
+    return _video_resnet('p3d_c',
                          pretrained, progress,
-                         block=BasicBlock,
-                         conv_makers=[Conv2Plus1D] * 4,
+                         block=P3DBlock_C,
                          layers=[2, 2, 2, 2],
-                         stem=R2Plus1dStem, **kwargs)
+                         stem=BasicStem, **kwargs)
