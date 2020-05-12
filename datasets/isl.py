@@ -8,8 +8,11 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from utils.transforms import *
 
-video_root = "/home/haodong/Data/CSL_Isolated/color_video_125000"
-csv_root = '/home/liweijie/projects/ActionRecognition/csv/isl'
+# video_root = "/home/haodong/Data/CSL_Isolated/color_video_125000"
+video_root = "/data/Data/CSL_Isolated/color_video_125000"
+csv_root = '/data/projects/ActionRecognition/csv/isl'
+# video_root = "/home/liweijie/NFS/Data/CSL_Isolated/color_video_125000"
+# csv_root = '/home/liweijie/NFS/projects/ActionRecognition/csv/isl'
 
 class Isl(Dataset):
 

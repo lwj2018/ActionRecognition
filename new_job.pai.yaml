@@ -14,7 +14,16 @@ taskRoles:
       memoryMB: 16384
       gpu: 1
     commands:
+      - pip install tensorboard
       - python /data/projects/ActionRecognition/train.py
+      # for copy
+pip install tensorboard
+pip install tensorboardx
+python /data/projects/ActionRecognition/train.py
+lwj2000/torch1.4:test
+10.13.22.251:8180/jingke/ufoym/deepo:pytorch-py36-cu100-v2.0
+python /data/projects/ActionRecognition/train.py
+10.13.22.251:8180/weijie/ufoym/deepo:pytorch1.2-cu100-thop
 extras:
   com.microsoft.pai.runtimeplugin:
     - plugin: ssh

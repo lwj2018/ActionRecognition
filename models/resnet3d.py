@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 
-from torch.hub import load_state_dict_from_url
-import torchvision.models.video.resnet
+from torch.utils.model_zoo import load_url
 
 __all__ = ['r3d_18', 'mc3_18', 'r2plus1d_18']
 
@@ -291,7 +290,7 @@ def _video_resnet(arch, pretrained=False, progress=True, **kwargs):
     if pretrained:
         # part resume
         model_dict = model.state_dict()
-        state_dict = load_state_dict_from_url(model_urls[arch],
+        state_dict = load_url(model_urls[arch],
                                               progress=progress)
         state_dict = {k : v for k,v in state_dict.items() if 'fc' not in k}
         model_dict.update(state_dict)
