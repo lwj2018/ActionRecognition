@@ -1,7 +1,8 @@
-from datasets.isl import Isl
+from datasets import Isl,Isl_RGBflow
 from models.resnet3d import r3d_18,r2plus1d_18
 from models.p3d import p3d18_a,p3d18_b,p3d18_c
 from models.slowfast import slowfast18,slowfast50,slowfast101,slowfast152
+from models.tsn import tsn
 from torch.utils.data import DataLoader
 
 def getNumclass(dataset):
@@ -15,6 +16,9 @@ def getDataloader(dataset,args):
     if dataset == 'isl':
         trainset = Isl('trainval')
         valset = Isl('test')
+    if dataset == 'isl_rgbflow':
+        trainset = Isl_RGBflow('trainval')
+        valset = Isl_RGBflow('test')
     else:
         raise Exception('Dont support this dataset: %s'%dataset)
     train_loader = DataLoader(trainset,batch_size=args.batch_size,shuffle=True,
@@ -42,6 +46,8 @@ def getModel(model_type,num_class):
         model = slowfast101(pretrained=False,num_classes=num_class)
     elif model_type == 'slowfast152':
         model = slowfast152(pretrained=False,num_classes=num_class)
+    elif model_type == 'tsn':
+        model = tsn(num_classes=num_class)
     else:
         raise Exception('Dont support this type of model: %s'%model_type)
     return model

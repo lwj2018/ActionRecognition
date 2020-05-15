@@ -14,4 +14,5 @@ Isolated Chinese Sign Language Dataset is a dataset for SLR, which has 500 actio
 | Model         |   Backbone     |       Total Params     |    FLOPs(b=2)    |
 | ------------- | -------------- | ---------------------- | ---------------- |
 | R3D           |   Resnet18     |     127.6M (466.36k)   |      12.39G      |
+| R(2+1)D       |   Resnet18     |     127.6M (31.56M)    |     325.16G      |
 | P3D           |   Resnet18     |     65.3M (8.73M)      |      72.21G      |

@@ -6,8 +6,8 @@ from torch.utils.data import DataLoader
 from utils.generalUtils import *
 from utils.ioUtils import *
 from tensorboardX import SummaryWriter
-from utils.trainUtils import train_c3d
-from utils.testUtils import eval_c3d
+from utils.trainUtils import train_tsn
+from utils.testUtils import eval_tsn
 from thop import profile,clever_format
 class Arguments:
     def __init__(self):
@@ -20,7 +20,7 @@ class Arguments:
 # Options
 dataset = 'isl'
 num_class = getNumclass(dataset)
-model_type = 'r2plus1d'
+model_type = 'tsn'
 store_name = '_'.join([dataset,model_type])
 summary_name = '/data/projects/ActionRecognition/runs/' + store_name
 checkpoint = None
@@ -71,9 +71,9 @@ print("Train %s on %s"%(model_type,dataset))
 print("Training Started".center(60, '#'))
 for epoch in range(start_epoch, start_epoch + args.epochs):
     # Eval the model
-    acc = eval_c3d(model,criterion,val_loader,device,epoch,log_interval,writer)
+    acc = eval_tsn(model,criterion,val_loader,device,epoch,log_interval,writer)
     # Train the model
-    train_c3d(model,criterion,optimizer,train_loader,device,epoch,log_interval,writer)
+    train_tsn(model,criterion,optimizer,train_loader,device,epoch,log_interval,writer)
     # Save model
     # remember best acc and save checkpoint
     is_best = acc>best_acc
