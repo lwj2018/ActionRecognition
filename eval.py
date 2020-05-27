@@ -21,9 +21,9 @@ class Arguments:
 dataset = 'isl'
 num_class = getNumclass(dataset)
 model_type = 'r2plus1d'
-store_name = '_'.join([dataset,model_type])
+store_name = '_'.join(['eval',dataset,model_type])
 summary_name = '/data/projects/ActionRecognition/runs/' + store_name
-checkpoint = None
+checkpoint = '/data/projects/ActionRecognition/checkpoint/isl_r2plus1d_best.pth.tar'
 log_interval = 100
 device_list = '1,2'
 model_path = "/data/projects/ActionRecognition/checkpoint"
@@ -45,45 +45,24 @@ train_loader, val_loader = getDataloader(dataset,args)
 # Build model
 model = getModel(model_type,num_class).to(device)
 # Run the model parallelly
+if checkpoint is not None:
+    start_epoch, best_acc = resume_model(model, checkpoint)
 if torch.cuda.device_count() > 1:
     print("------- Using {} GPUs --------".format(torch.cuda.device_count()))
     model = nn.DataParallel(model)
-if checkpoint is not None:
-    start_epoch, best_acc = resume_model(model, checkpoint)
-# Analyse model comlexity
-input = torch.randn(2,3,16,224,224).to(device)
-flops, params = profile(model, inputs=(input,))
-flops, params = clever_format([flops, params])
-print("Model {}, FLOPs: {}, params: {}".format(model_type,flops,params))
 
-# Create loss criterion & optimizer
+# Create loss criterion
 criterion = nn.CrossEntropyLoss()
-polices = model.get_optim_policies(args.learning_rate)
-optimizer = torch.optim.Adam(polices)
 
 # Use writer to record
 writer = SummaryWriter(os.path.join(summary_name, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))))
 
-# Start training
-best_acc = 0.0
-acc = 0.0
-print("Train %s on %s"%(model_type,dataset))
-print("Training Started".center(60, '#'))
-for epoch in range(start_epoch, start_epoch + args.epochs):
+# Start Evaluation
+print("Eval %s on %s"%(model_type,dataset))
+print("Evaluation Started".center(60, '#'))
+for epoch in range(start_epoch, start_epoch + 1):
     # Eval the model
-    acc = eval_c3d(model,criterion,val_loader,device,epoch,log_interval,writer)
-    # Train the model
-    train_c3d(model,criterion,optimizer,train_loader,device,epoch,log_interval,writer,eval_samples=1000)
-    # Save model
-    # remember best acc and save checkpoint
-    is_best = acc>best_acc
-    best_acc = max(acc, best_acc)
-    save_checkpoint({
-        'epoch': epoch + 1,
-        'state_dict': model.state_dict(),
-        'best': best_acc,
-    }, is_best, model_path, store_name)
-    print("Epoch {} Model Saved".format(epoch+1).center(60, '#'))
-    print('Epoch best acc: {:.3f}'.format(best_acc))
+    acc = eval_c3d(model,criterion,val_loader,device,epoch,log_interval,writer,eval_samples=len(val_loader))
+    print('Epoch best acc: {:.3f}'.format(acc))
 
-print("Training Finished".center(60, '#'))
+print("Evaluation Finished".center(60, '#'))

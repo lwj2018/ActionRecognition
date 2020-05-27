@@ -1,7 +1,7 @@
 # Part of this code refers to https://github.com/zhoubolei/TRN-pytorch
 import torch
 import torch.nn as nn
-import torchvision.models
+import models.resnet2d
 
 class tsn(nn.Module):
 
@@ -13,20 +13,31 @@ class tsn(nn.Module):
         self.num_classes = num_classes
         self.length = length
         self.weight = weight
-        self._get_base_model()
+        self.flow_channel = flow_channel
+        self._get_base_model(base_model)
         self._adjust_first_layer(flow_channel)
+        self.consensusModel = AvgConsensusModel()
 
     def forward(self,x,flow):
+        # Rgb forward & flow forward
+        N = x.size(0)
+        x = x.view( (-1,3) + x.size()[-2:] )
         x = self.rgbmodel(x)
+        flow = flow.view( (-1,self.flow_channel) + flow.size()[-2:] )
         flow = self.flowmodel(flow)
-        out = x + weight * flow
+        # View
+        x = x.view(N,-1,x.size()[-1])
+        flow = flow.view(N,-1,flow.size()[-1])
+        # Fuse & Consensus
+        out = x + self.weight * flow
+        out = self.consensusModel(out)
         return out
 
     def _get_base_model(self,base_model):
         n = self.num_classes
         if 'resnet' in base_model:
-            self.rgbmodel = getattr(torchvision.models,base_model)(pretrained=True,num_classes=n)
-            self.flowmodel = getattr(torchvision.models,base_model)(pretrained=True,num_classes=n)
+            self.rgbmodel = getattr(models.resnet2d,base_model)(pretrained=True,num_classes=n)
+            self.flowmodel = getattr(models.resnet2d,base_model)(pretrained=True,num_classes=n)
 
     def _adjust_first_layer(self,input_channel):
         # modify the convolution layers
@@ -54,3 +65,19 @@ class tsn(nn.Module):
         # replace the first convlution layer
         setattr(container, layer_name, new_conv)
 
+    def get_optim_policies(self,lr):
+        return [
+            {'params':self.rgbmodel.parameters(),'lr':lr},
+            {'params':self.flowmodel.parameters(),'lr':lr},
+        ]
+
+class AvgConsensusModel(nn.Module):
+    def __init__(self):
+        super(AvgConsensusModel,self).__init__()
+        self.avgpool = nn.AdaptiveAvgPool1d(1)
+
+    def forward(self,x):
+        x = x.permute(0,2,1)
+        x = self.avgpool(x)
+        x = x.squeeze(-1)
+        return x

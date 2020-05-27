@@ -15,6 +15,7 @@ def save_checkpoint(state, is_best, model_path, name):
 def resume_model(model, checkpoint):
     params_dict = torch.load(checkpoint)
     state_dict = params_dict['state_dict']
+    state_dict = {k : v for k,v in state_dict.items() if 'total' not in k}
     model.load_state_dict(state_dict)
 
     epoch = params_dict['epoch']

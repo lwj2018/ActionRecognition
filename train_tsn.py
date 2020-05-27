@@ -18,15 +18,17 @@ class Arguments:
         # Train settings
         self.num_workers = 1
 # Options
-dataset = 'isl'
+code_root = '/data/projects/ActionRecognition/'
+# code_root = '/home/liweijie/projects/ActionRecognition/'
+dataset = 'isl_rgbflow'
 num_class = getNumclass(dataset)
 model_type = 'tsn'
 store_name = '_'.join([dataset,model_type])
-summary_name = '/data/projects/ActionRecognition/runs/' + store_name
+summary_name = code_root+'runs/' + store_name
 checkpoint = None
 log_interval = 100
-device_list = '1,2'
-model_path = "/data/projects/ActionRecognition/checkpoint"
+device_list = '2'
+model_path = code_root+'checkpoint'
 create_path(model_path)
 
 start_epoch = 0
@@ -51,10 +53,11 @@ if torch.cuda.device_count() > 1:
 if checkpoint is not None:
     start_epoch, best_acc = resume_model(model, checkpoint)
 # Analyse model comlexity
-input = torch.randn(2,3,16,224,224).to(device)
-flops, params = profile(model, inputs=(input,))
-flops, params = clever_format([flops, params])
-print("Model {}, FLOPs: {}, params: {}".format(model_type,flops,params))
+# input = torch.randn(2,3*16,224,224).to(device)
+# input_flow = torch.randn(2,10*16,224,224).to(device)
+# flops, params = profile(model, inputs=(input,input_flow))
+# flops, params = clever_format([flops, params])
+# print("Model {}, FLOPs: {}, params: {}".format(model_type,flops,params))
 
 # Create loss criterion & optimizer
 criterion = nn.CrossEntropyLoss()
@@ -71,7 +74,7 @@ print("Train %s on %s"%(model_type,dataset))
 print("Training Started".center(60, '#'))
 for epoch in range(start_epoch, start_epoch + args.epochs):
     # Eval the model
-    acc = eval_tsn(model,criterion,val_loader,device,epoch,log_interval,writer)
+    acc = eval_tsn(model,criterion,val_loader,device,epoch,log_interval,writer,eval_samples=1000)
     # Train the model
     train_tsn(model,criterion,optimizer,train_loader,device,epoch,log_interval,writer)
     # Save model

@@ -8,6 +8,8 @@ from torch.utils.data import DataLoader
 def getNumclass(dataset):
     if dataset == 'isl':
         num_class = 500
+    elif dataset == 'isl_rgbflow':
+        num_class = 200
     else:
         raise Exception('Dont support this dataset: %s'%dataset)
     return num_class
@@ -16,7 +18,7 @@ def getDataloader(dataset,args):
     if dataset == 'isl':
         trainset = Isl('trainval')
         valset = Isl('test')
-    if dataset == 'isl_rgbflow':
+    elif dataset == 'isl_rgbflow':
         trainset = Isl_RGBflow('trainval')
         valset = Isl_RGBflow('test')
     else:

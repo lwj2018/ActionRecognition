@@ -8,20 +8,26 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from utils.transforms import *
 
+# # Settings for server251
+# video_root = "/home/haodong/Data/CSL_Isolated/color_video_125000"
+# flow_root = "/home/liweijie/NFS/Data/CSL_Isolated/flow"
+# csv_root = '/home/liweijie/projects/ActionRecognition/csv/isl_rgbflow'
+
 video_root = "/data/Data/CSL_Isolated/color_video_125000"
 flow_root = "/data/Data/CSL_Isolated/flow"
-csv_root = '/data/projects/ActionRecognition/csv/isl'
+csv_root = '/data/projects/ActionRecognition/csv/isl_rgbflow'
 
 class Isl_RGBflow(Dataset):
 
     def __init__(self, setname, length=16,
             flow_length=5):
         self.length = length
-        self.flow_length = length
+        self.flow_length = flow_length
         csv_path = osp.join(csv_root, setname + '.csv')
         lines = [x.strip() for x in open(csv_path, 'r').readlines()][1:]
 
         data = []
+        flow_data = []
         label = []
 
         for l in lines:
@@ -30,9 +36,11 @@ class Isl_RGBflow(Dataset):
             flow_path = osp.join(flow_root, name)
             lb = int(lb)
             data.append(path)
+            flow_data.append(flow_path)
             label.append(lb)
 
         self.data = data
+        self.flow_data = flow_data
         self.label = label
 
         scale_size = 256
@@ -63,8 +71,8 @@ class Isl_RGBflow(Dataset):
     def __getitem__(self, i):
         start = time.time()
         path, flow_path, label = self.data[i], self.flow_data[i], self.label[i]
-        data = self.read_video(path)
-        flow_data = self.read_flow_video(flow_path)
+        data, indices = self.read_video(path)
+        flow_data = self.read_flow_video(flow_path,indices)
         end = time.time()
         # print('%.3f s'%(end-start))
         return data, flow_data, label
@@ -73,30 +81,28 @@ class Isl_RGBflow(Dataset):
         image_list = os.listdir(path)
         image_list.sort()
         # Ignore the first frame
-        n_frames = len(image_list)
+        n_frames = len(image_list)-1
         indices =  self.select_indices(n_frames)
         images = []
         for ind in indices:
             img = Image.open(osp.join(path,image_list[ind])).convert('RGB')
             images.append(img)
         data = self.transforms(images)
-        return data
+        return data, indices
 
-    def read_flow_video(self, path):
+    def read_flow_video(self, path, indices):
         image_list = os.listdir(path)
         image_list.sort()
         l = len(image_list)
         x_list = image_list[:l//2]
         y_list = image_list[l//2:]
-        # Ignore the first frame
-        image_list = image_list[1:]
-        n_frames = len(image_list)
-        indices =  self.select_indices(n_frames)
         images = []
         for ind in indices:
-            for p in range(self.flow_length):
-                x_img = Image.open(osp.join(path,x_list[ind+p])).convert('RGB')
-                y_img = Image.open(osp.join(path,y_list[ind+p])).convert('RGB')
+            p = 0
+            for _ in range(self.flow_length):
+                if (ind+p+1)<(l//2): p = p+1
+                x_img = Image.open(osp.join(path,x_list[ind+p])).convert('L')
+                y_img = Image.open(osp.join(path,y_list[ind+p])).convert('L')
                 images.extend([x_img,y_img])
         data = self.transforms(images)
         return data
